@@ -21,9 +21,9 @@ Private Declare PtrSafe Function DispCallFunc Lib "oleaut32.dll" _
     (ByVal pvInstance As LongPtr, _
     ByVal oVft As LongPtr, _
     ByVal cc As Long, _
-    ByVal vtReturn As Long, _
+    ByVal vtReturn As Integer, _
     ByVal cActuals As Long, _
-    ByRef prgvt As Long, _
+    ByRef prgvt As Integer, _
     ByRef prgpvarg As LongPtr, _
     ByRef pvargResult As Variant) As Long
 
@@ -86,7 +86,7 @@ Private Function VBCallAbsoluteObject(ByVal Object As IUnknown, _
         Call Err.Raise(5)
     End If
     Dim hr As Long
-    Dim argVt() As Long
+    Dim argVt() As Integer
     Dim argsPtr() As LongPtr
     Dim i As Long, c As Long
     Dim lb As Long, ub As Long
@@ -103,7 +103,7 @@ Private Function VBCallAbsoluteObject(ByVal Object As IUnknown, _
         hr = DispCallFunc(ObjPtr(Object), _
             CLngPtr(IndexForVftable) * Len(argsPtr(0)), _
             4, _
-            CLng(RetType), _
+            CInt(RetType), _
             c, _
             argVt(lb), _
             argsPtr(lb), _
@@ -114,7 +114,7 @@ Private Function VBCallAbsoluteObject(ByVal Object As IUnknown, _
         hr = DispCallFunc(ObjPtr(Object), _
             CLngPtr(IndexForVftable) * Len(argsPtr(0)), _
             4, _
-            CLng(RetType), _
+            CInt(RetType), _
             0, _
             argVt(0), _
             argsPtr(0), _
