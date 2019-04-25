@@ -146,13 +146,13 @@ Public Function AddExitHandler(ByVal Handler As Object, Optional ByVal Key As St
     If Not m_collHandlers Is Nothing Then
         On Error Resume Next
         Dim o As Object
-        ptr = 0^
+        ptr = 0
         ptr = m_collHandlers.Item(Key)
         On Error GoTo 0
-        If ptr <> 0^ Then
+        If ptr <> 0 Then
             Call CopyMemory(o, ptr, Len(ptr))
             Set AddExitHandler = o
-            ptr = 0^
+            ptr = 0
             Call CopyMemory(o, ptr, Len(ptr))
             Exit Function
         End If

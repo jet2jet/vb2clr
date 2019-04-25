@@ -55,6 +55,28 @@ Private Sub CleanupImpl()
     End If
 End Sub
 
+' Parses GUID in string format into an array of Long.
+' The array can be used as a pointer to GUID structure data.
+Public Sub ParseGUID(ByRef lnGUID() As Long, ByVal str As String)
+    If Left$(str, 1) = "{" Then
+        If Right$(str, 1) <> "}" Then Call Err.Raise(5)
+        str = Mid$(str, 2, Len(str) - 2)
+    End If
+    If Len(str) <> 8 + 4 + 4 + 4 + 12 + 4 Then Call Err.Raise(5)
+    Dim parts() As String
+    parts = Split(str, "-")
+    If LBound(parts) <> 0 Or UBound(parts) <> 4 Then Call Err.Raise(5)
+    If Len(parts(0)) <> 8 Then Call Err.Raise(5)
+    If Len(parts(1)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(2)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(3)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(4)) <> 12 Then Call Err.Raise(5)
+    lnGUID(0) = CLng("&H" + parts(0))
+    lnGUID(1) = CLng("&H" + parts(2) + parts(1))
+    lnGUID(2) = CLng("&H" + Mid$(parts(4), 3, 2) + Mid$(parts(4), 1, 2) + Right$(parts(3), 2) + Left$(parts(3), 2))
+    lnGUID(3) = CLng("&H" + Mid$(parts(4), 11, 2) + Mid$(parts(4), 9, 2) + Mid$(parts(4), 7, 2) + Mid$(parts(4), 5, 2))
+End Sub
+
 ' Call object's method with index of vftable
 Private Function VBCallAbsoluteObject(ByVal Object As IUnknown, _
     ByVal IndexForVftable As Integer, _
@@ -149,50 +171,6 @@ Private Function GetCLRTypeFromInheritancesByMemberName(ByVal t As mscorlib.Type
     Set GetCLRTypeFromInheritancesByMemberName = GetCLRTypeFromInheritancesByMemberName(t.BaseType, MemberName, MemberType)
 End Function
 
-Private Function CallGetIDsOfNamesImpl(ByVal Object As Object, ByRef Names() As String, ByRef ids() As Long) As Boolean
-    Dim hr As Long
-    Dim iidNull(0 To 3) As Long
-    Dim iidNullPtr As LongPtr
-    Dim arrStr() As LongPtr
-    Dim arrStrPtr As LongPtr
-    Dim ptrRet As LongPtr
-    Dim lb As Long, ub As Long, i As Long
-    Dim unk As IUnknown
-
-    Set unk = VBQueryInterfaceByString(Object, "00020400-0000-0000-C000-000000000046")
-    If unk Is Nothing Then Call Err.Raise(5)
-
-    lb = LBound(Names)
-    ub = UBound(Names)
-    ReDim arrStr(lb To ub + 1)
-    ReDim ids(lb To ub + 1)
-    For i = 0 To 3: iidNull(i) = 0: Next i
-    iidNullPtr = VarPtr(iidNull(0))
-    For i = lb To ub
-        arrStr(i) = StrPtr(Names(i))
-    Next i
-    arrStrPtr = VarPtr(arrStr(lb))
-    ptrRet = VarPtr(ids(lb))
-    hr = VBCallAbsoluteObject( _
-        unk, _
-        5, _
-        vbLong, _
-        CLngPtr(iidNullPtr), _
-        CLngPtr(arrStrPtr), _
-        CLng(ub - lb + 1), _
-        CLng(2048), _
-        CLngPtr(ptrRet))
-    Set unk = Nothing
-    If hr < 0 Then
-        If hr <> &H80020006 Then
-            Call Err.Raise(hr)
-        End If
-        CallGetIDsOfNamesImpl = False
-    Else
-        CallGetIDsOfNamesImpl = True
-    End If
-End Function
-
 Private Function ExecuteCSharpCode(ByVal domain As mscorlib.AppDomain, ByVal code As String, _
     ParamArray RefAssemblyName() As Variant) As mscorlib.Assembly
     Dim asmSys As mscorlib.Assembly, o As Object
@@ -235,11 +213,11 @@ Private Function IsType(ByRef v As Variant) As Boolean
     IsType = (VarType(v) = 13 And TypeOf v Is mscorlib.Type)
 End Function
 
-' PickupMethodByParamTypeImpl: Œ^utv‚ÉŠÜ‚Ü‚ê‚é–¼‘OuNamev‚Ìƒƒ\ƒbƒh‚ğŒŸõ‚µ‚Ü‚·B
-'   BindingFlags: i‚è‚İğŒ
-'   Types: ƒƒ\ƒbƒh‚Ìˆø”‚É‘Î‰‚·‚éŒ^‚ğ•\‚· mscorlib.Type ‚ÌƒCƒ“ƒXƒ^ƒ“ƒXB
-'          ‘Î‰‚·‚éˆø”‚Ì”‚¾‚¯w’è‚µ‚Ü‚·B
-'   –ß‚è’l: mscorlib.MethodInfo ‚ÌƒCƒ“ƒXƒ^ƒ“ƒXA‚Ü‚½‚ÍŒ©‚Â‚©‚ç‚È‚¢ê‡ Nothing
+' PickupMethodByParamTypeImpl: å‹ã€Œtã€ã«å«ã¾ã‚Œã‚‹åå‰ã€ŒNameã€ã®ãƒ¡ã‚½ãƒƒãƒ‰ã‚’æ¤œç´¢ã—ã¾ã™ã€‚
+'   BindingFlags: çµã‚Šè¾¼ã¿æ¡ä»¶
+'   Types: ãƒ¡ã‚½ãƒƒãƒ‰ã®å¼•æ•°ã«å¯¾å¿œã™ã‚‹å‹ã‚’è¡¨ã™ mscorlib.Type ã®ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã€‚
+'          å¯¾å¿œã™ã‚‹å¼•æ•°ã®æ•°ã ã‘æŒ‡å®šã—ã¾ã™ã€‚
+'   æˆ»ã‚Šå€¤: mscorlib.MethodInfo ã®ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã€ã¾ãŸã¯è¦‹ã¤ã‹ã‚‰ãªã„å ´åˆ Nothing
 Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Name As String, ByVal BindingFlags As mscorlib.BindingFlags, ByRef Types() As Variant) As mscorlib.MethodInfo
     Dim tlb As Long, tub As Long
     Dim actualTypeCount As Long
@@ -247,10 +225,10 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
     tlb = LBound(Types)
     tub = UBound(Types)
     actualTypeCount = 0
-    ' ‰Â•Ï’·ˆø”‚Åw’è‚³‚ê‚½ Type ƒCƒ“ƒXƒ^ƒ“ƒX‚Ì”‚ğŒvZ
+    ' å¯å¤‰é•·å¼•æ•°ã§æŒ‡å®šã•ã‚ŒãŸ Type ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã®æ•°ã‚’è¨ˆç®—
     For i = tlb To tub
-        ' Types(i) ‚ª Type ƒCƒ“ƒXƒ^ƒ“ƒX‚©‚Ç‚¤‚©‚ğ”»’è
-        ' (13 ‚Í VT_UNKNOWNAmscorlib.Type ‚Í IUnknown ƒx[ƒX‚ÌŒ^‚Ì‚½‚ß”O‚Ì‚½‚ßƒ`ƒFƒbƒN)
+        ' Types(i) ãŒ Type ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ã‹ã©ã†ã‹ã‚’åˆ¤å®š
+        ' (13 ã¯ VT_UNKNOWNã€mscorlib.Type ã¯ IUnknown ãƒ™ãƒ¼ã‚¹ã®å‹ã®ãŸã‚å¿µã®ãŸã‚ãƒã‚§ãƒƒã‚¯)
         If IsType(Types(i)) Then
             actualTypeCount = actualTypeCount + 1
         End If
@@ -258,18 +236,18 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
 
     Dim mis() As mscorlib.MethodInfo, mi As mscorlib.MethodInfo
     Dim j As Long, k As Long, Matched As Boolean
-    ' BindingFlags ‚Å‘Î‰‚·‚éƒƒ\ƒbƒh‚Ìˆê——‚ğæ“¾
+    ' BindingFlags ã§å¯¾å¿œã™ã‚‹ãƒ¡ã‚½ãƒƒãƒ‰ã®ä¸€è¦§ã‚’å–å¾—
     mis = t.GetMethods(BindingFlags)
-    ' ‚»‚ê‚¼‚ê‚Ìƒƒ\ƒbƒh‚É‘Î‚µAƒƒ\ƒbƒh–¼‚Æˆø”‚ÌŒ^‚ğƒ`ƒFƒbƒN
+    ' ãã‚Œãã‚Œã®ãƒ¡ã‚½ãƒƒãƒ‰ã«å¯¾ã—ã€ãƒ¡ã‚½ãƒƒãƒ‰åã¨å¼•æ•°ã®å‹ã‚’ãƒã‚§ãƒƒã‚¯
     For i = LBound(mis) To UBound(mis)
         Set mi = mis(i)
-        ' ƒƒ\ƒbƒh–¼‚ğ Option Compare ƒXƒe[ƒgƒƒ“ƒgİ’è‚É‰‚¶‚½”äŠr•û–@‚Å”»’è
-        ' (‘å•¶šE¬•¶š‚Ì‹æ•Ê‚ğ§Œä‚µ‚½‚¢ê‡‚Í StrComp ŠÖ”‚ğ—p‚¢‚Ü‚·B)
+        ' ãƒ¡ã‚½ãƒƒãƒ‰åã‚’ Option Compare ã‚¹ãƒ†ãƒ¼ãƒˆãƒ¡ãƒ³ãƒˆè¨­å®šã«å¿œã˜ãŸæ¯”è¼ƒæ–¹æ³•ã§åˆ¤å®š
+        ' (å¤§æ–‡å­—ãƒ»å°æ–‡å­—ã®åŒºåˆ¥ã‚’åˆ¶å¾¡ã—ãŸã„å ´åˆã¯ StrComp é–¢æ•°ã‚’ç”¨ã„ã¾ã™ã€‚)
         If mi.Name = Name Then
             Dim p() As mscorlib.ParameterInfo
-            ' ˆø”î•ñ‚ğæ“¾(”z—ñ‚ª•Ô‚è‚Ü‚·)
+            ' å¼•æ•°æƒ…å ±ã‚’å–å¾—(é…åˆ—ãŒè¿”ã‚Šã¾ã™)
             p = mi.GetParameters()
-            ' ˆø”‚Ì”‚Ìˆê’v«‚ğŠm”F
+            ' å¼•æ•°ã®æ•°ã®ä¸€è‡´æ€§ã‚’ç¢ºèª
             If UBound(p) - LBound(p) + 1 = actualTypeCount Then
                 Matched = True
                 k = LBound(p)
@@ -277,12 +255,12 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
                     If IsType(Types(j)) Then
                         Dim objPI As mscorlib.Object
                         Dim o As Object, tP As mscorlib.Type
-                        ' ParameterInfo ƒNƒ‰ƒX‚Ì ParameterType ƒvƒƒpƒeƒB[‚ğŒ©‚é‚½‚ßA
-                        ' mscorlib.Object Œo—R‚Å VB ‚Ì Object Œ^‚É•ÏŠ·
+                        ' ParameterInfo ã‚¯ãƒ©ã‚¹ã® ParameterType ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ãƒ¼ã‚’è¦‹ã‚‹ãŸã‚ã€
+                        ' mscorlib.Object çµŒç”±ã§ VB ã® Object å‹ã«å¤‰æ›
                         Set objPI = p(k)
                         Set o = objPI
                         Set tP = o.ParameterType
-                        ' Œ^‚ªˆê’v‚µ‚È‚¢ˆø”‚ªˆê‚Â‚Å‚à‚ ‚Á‚½ê‡‚Í•sˆê’v‚Æ‚·‚é
+                        ' å‹ãŒä¸€è‡´ã—ãªã„å¼•æ•°ãŒä¸€ã¤ã§ã‚‚ã‚ã£ãŸå ´åˆã¯ä¸ä¸€è‡´ã¨ã™ã‚‹
                         If Not tP.Equals(Types(j)) Then
                             Matched = False
                             Exit For
@@ -290,7 +268,7 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
                         k = k + 1
                     End If
                 Next j
-                ' ˆê’v‚µ‚½ê‡‚ÍŒ©‚Â‚©‚Á‚½‚à‚Ì‚Æ‚µ‚Äƒ‹[ƒv‚ğ”²‚¯‚é
+                ' ä¸€è‡´ã—ãŸå ´åˆã¯è¦‹ã¤ã‹ã£ãŸã‚‚ã®ã¨ã—ã¦ãƒ«ãƒ¼ãƒ—ã‚’æŠœã‘ã‚‹
                 If Matched Then Exit For
             End If
         End If
@@ -609,7 +587,7 @@ End Function
 Public Function CLRPropertyGet(ByVal obj As mscorlib.Object, ByVal PropName As String, ParamArray Arguments() As Variant) As Variant
     Dim hr As Long, v() As Variant
     v = Arguments
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRPropertyGet, m_objManagedSupport.MyInvokeMember( _
         CLRGetType(obj), _
         PropName, _
@@ -632,7 +610,7 @@ Public Sub CLRPropertyPut(ByVal obj As mscorlib.Object, ByVal PropName As String
         Call VariantCopy(v(i), Arguments(j))
         j = j + 1
     Next i
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     Call m_objManagedSupport.MyInvokeMember( _
         CLRGetType(obj), _
         PropName, _
@@ -660,7 +638,7 @@ Public Function CLRInvokeMethod(ByVal obj As mscorlib.Object, ByVal MethodName A
     Dim v() As Variant
     v = Arguments
     Dim hr As Long
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRInvokeMethod, m_objManagedSupport.MyInvokeInstanceMember( _
         obj, _
         MethodName, _
@@ -673,7 +651,7 @@ End Function
 '   ArgTypesAndArgs must be the following values:
 '     index[0, 2, 4, ...]: Type instance(s)
 '     index[1, 3, 5, ...]: parameter value(s)
-Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ParamArray ArgTypesAndArgs() As Variant) As Variant
+Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ByVal MethodName As String, ParamArray ArgTypesAndArgs() As Variant) As Variant
     Dim ArgTypes() As Variant, Args() As Variant
     Dim c As Long, lb As Long, ub As Long, i As Long
     lb = LBound(ArgTypesAndArgs)
@@ -697,7 +675,7 @@ Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ParamArra
     If cmi Is Nothing Then Call Err.Raise(438)
 
     Dim hr As Long
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRInvokeMethodWithTypes, ToObject(cmi).Invoke_3(obj, Args))
     If hr < 0 Then Call Err.Raise(hr)
 End Function
@@ -709,8 +687,10 @@ Public Function CLRInvokeMethodWithTypes2(ByVal obj As mscorlib.Object, ByVal Me
     If cmi Is Nothing Then Call Err.Raise(438)
 
     Dim hr As Long
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
-    hr = VariantCopy(CLRInvokeMethodWithTypes2, ToObject(cmi).Invoke_3(obj, Arguments))
+    Dim v() As Variant
+    v = Arguments
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
+    hr = VariantCopy(CLRInvokeMethodWithTypes2, ToObject(cmi).Invoke_3(obj, v))
     If hr < 0 Then Call Err.Raise(hr)
 End Function
 
@@ -719,7 +699,7 @@ Public Function CLRInvokeStaticMethod(ByVal t As mscorlib.Type, ByVal MethodName
     Dim hr As Long
     Dim v() As Variant
     v = Arguments
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRInvokeStaticMethod, m_objManagedSupport.MyInvokeMember( _
         t, _
         MethodName, _
@@ -758,7 +738,7 @@ Public Function CLRInvokeStaticMethodWithTypes(ByVal t As mscorlib.Type, ByVal M
     If cmi Is Nothing Then Call Err.Raise(438)
 
     Dim hr As Long
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRInvokeStaticMethodWithTypes, ToObject(cmi).Invoke_3(Nothing, Args))
     If hr < 0 Then Call Err.Raise(hr)
 End Function
@@ -771,7 +751,7 @@ Public Function CLRInvokeStaticMethodWithTypes2(ByVal t As mscorlib.Type, ByVal 
 
     Dim hr As Long, v() As Variant
     v = Arguments
-    ' uSetv‚È‚µ‚Å’l‚ğƒRƒs[(ƒ€[ƒu)‚Å‚«‚é‚æ‚¤‚É VariantCopy ‚ğ—p‚¢‚é
+    ' ã€ŒSetã€ãªã—ã§å€¤ã‚’ã‚³ãƒ”ãƒ¼(ãƒ ãƒ¼ãƒ–)ã§ãã‚‹ã‚ˆã†ã« VariantCopy ã‚’ç”¨ã„ã‚‹
     hr = VariantCopy(CLRInvokeStaticMethodWithTypes2, ToObject(cmi).Invoke_3(Nothing, v))
     If hr < 0 Then Call Err.Raise(hr)
 End Function

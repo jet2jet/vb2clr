@@ -53,6 +53,28 @@ Private Sub CleanupImpl()
     End If
 End Sub
 
+' Parses GUID in string format into an array of Long.
+' The array can be used as a pointer to GUID structure data.
+Public Sub ParseGUID(ByRef lnGUID() As Long, ByVal str As String)
+    If Left$(str, 1) = "{" Then
+        If Right$(str, 1) <> "}" Then Call Err.Raise(5)
+        str = Mid$(str, 2, Len(str) - 2)
+    End If
+    If Len(str) <> 8 + 4 + 4 + 4 + 12 + 4 Then Call Err.Raise(5)
+    Dim parts() As String
+    parts = Split(str, "-")
+    If LBound(parts) <> 0 Or UBound(parts) <> 4 Then Call Err.Raise(5)
+    If Len(parts(0)) <> 8 Then Call Err.Raise(5)
+    If Len(parts(1)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(2)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(3)) <> 4 Then Call Err.Raise(5)
+    If Len(parts(4)) <> 12 Then Call Err.Raise(5)
+    lnGUID(0) = CLng("&H" + parts(0))
+    lnGUID(1) = CLng("&H" + parts(2) + parts(1))
+    lnGUID(2) = CLng("&H" + Mid$(parts(4), 3, 2) + Mid$(parts(4), 1, 2) + Right$(parts(3), 2) + Left$(parts(3), 2))
+    lnGUID(3) = CLng("&H" + Mid$(parts(4), 11, 2) + Mid$(parts(4), 9, 2) + Mid$(parts(4), 7, 2) + Mid$(parts(4), 5, 2))
+End Sub
+
 ' Call object's method with index of vftable
 Private Function VBCallAbsoluteObject(ByVal Object As IUnknown, _
     ByVal IndexForVftable As Integer, _
@@ -145,50 +167,6 @@ Private Function GetCLRTypeFromInheritancesByMemberName(ByVal t As mscorlib.Type
         Exit Function
     End If
     Set GetCLRTypeFromInheritancesByMemberName = GetCLRTypeFromInheritancesByMemberName(t.BaseType, MemberName, MemberType)
-End Function
-
-Private Function CallGetIDsOfNamesImpl(ByVal Object As Object, ByRef Names() As String, ByRef ids() As Long) As Boolean
-    Dim hr As Long
-    Dim iidNull(0 To 3) As Long
-    Dim iidNullPtr As LongPtr
-    Dim arrStr() As LongPtr
-    Dim arrStrPtr As LongPtr
-    Dim ptrRet As LongPtr
-    Dim lb As Long, ub As Long, i As Long
-    Dim unk As IUnknown
-
-    Set unk = VBQueryInterfaceByString(Object, "00020400-0000-0000-C000-000000000046")
-    If unk Is Nothing Then Call Err.Raise(5)
-
-    lb = LBound(Names)
-    ub = UBound(Names)
-    ReDim arrStr(lb To ub + 1)
-    ReDim ids(lb To ub + 1)
-    For i = 0 To 3: iidNull(i) = 0: Next i
-    iidNullPtr = VarPtr(iidNull(0))
-    For i = lb To ub
-        arrStr(i) = StrPtr(Names(i))
-    Next i
-    arrStrPtr = VarPtr(arrStr(lb))
-    ptrRet = VarPtr(ids(lb))
-    hr = VBCallAbsoluteObject( _
-        unk, _
-        5, _
-        vbLong, _
-        CLngPtr(iidNullPtr), _
-        CLngPtr(arrStrPtr), _
-        CLng(ub - lb + 1), _
-        CLng(2048), _
-        CLngPtr(ptrRet))
-    Set unk = Nothing
-    If hr < 0 Then
-        If hr <> &H80020006 Then
-            Call Err.Raise(hr)
-        End If
-        CallGetIDsOfNamesImpl = False
-    Else
-        CallGetIDsOfNamesImpl = True
-    End If
 End Function
 
 Private Function ExecuteCSharpCode(ByVal domain As mscorlib.AppDomain, ByVal code As String, _
@@ -671,7 +649,7 @@ End Function
 '   ArgTypesAndArgs must be the following values:
 '     index[0, 2, 4, ...]: Type instance(s)
 '     index[1, 3, 5, ...]: parameter value(s)
-Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ParamArray ArgTypesAndArgs() As Variant) As Variant
+Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ByVal MethodName As String, ParamArray ArgTypesAndArgs() As Variant) As Variant
     Dim ArgTypes() As Variant, Args() As Variant
     Dim c As Long, lb As Long, ub As Long, i As Long
     lb = LBound(ArgTypesAndArgs)
@@ -707,8 +685,10 @@ Public Function CLRInvokeMethodWithTypes2(ByVal obj As mscorlib.Object, ByVal Me
     If cmi Is Nothing Then Call Err.Raise(438)
 
     Dim hr As Long
+    Dim v() As Variant
+    v = Arguments
     ' 「Set」なしで値をコピー(ムーブ)できるように VariantCopy を用いる
-    hr = VariantCopy(CLRInvokeMethodWithTypes2, ToObject(cmi).Invoke_3(obj, Arguments))
+    hr = VariantCopy(CLRInvokeMethodWithTypes2, ToObject(cmi).Invoke_3(obj, v))
     If hr < 0 Then Call Err.Raise(hr)
 End Function
 
