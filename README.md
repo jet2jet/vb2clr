@@ -2,6 +2,8 @@
 
 The helper class `CLRHost` for Visual Basic for Applications (VBA) 7.0, providing access to CLR (.NET Framework) assemblies and classes.
 
+**To use .NET (formerly .NET Core), consider using [vb2net](https://github.com/jet2jet/vb2net).**
+
 ## Requirements
 
 Visual Basic for Application 7.0 (included in Microsoft Office 2010 or higher)
