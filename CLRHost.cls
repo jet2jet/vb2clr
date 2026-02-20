@@ -658,10 +658,11 @@ Public Function CLRInvokeMethodWithTypes(ByVal obj As mscorlib.Object, ByVal Met
     If c Mod 2 <> 0 Then
         Call Err.Raise(5)
     End If
-    ReDim ArgTypes(0 To (c / 2) - 1), Args(0 To (c / 2) - 1)
+    c = c / 2
+    ReDim ArgTypes(0 To c - 1), Args(0 To c - 1)
     Dim j As Long
     j = lb
-    For i = 0 To c - 1 Step 2
+    For i = 0 To c - 1
         If Not IsType(ArgTypesAndArgs(j)) Then Call Err.Raise(5)
         Set ArgTypes(i) = ArgTypesAndArgs(j)
         Call VariantCopy(Args(i), ArgTypesAndArgs(j + 1))
