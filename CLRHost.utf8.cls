@@ -213,12 +213,33 @@ Private Function IsType(ByRef v As Variant) As Boolean
     IsType = (VarType(v) = 13 And TypeOf v Is mscorlib.Type)
 End Function
 
+Private Function ConstructorInfoArrayToMethodBaseArray(ci() As mscorlib.ConstructorInfo) As mscorlib.MethodBase()
+    Dim i As Long
+    Dim mbi() As mscorlib.MethodBase
+    ReDim mbi(LBound(ci) To UBound(ci))
+    For i = LBound(ci) To UBound(ci)
+        Set mbi(i) = ci(i)
+    Next i
+    ConstructorInfoArrayToMethodBaseArray = mbi
+End Function
+
+Private Function MethodInfoArrayToMethodBaseArray(mi() As mscorlib.MethodInfo) As mscorlib.MethodBase()
+    Dim i As Long
+    Dim mbi() As mscorlib.MethodBase
+    ReDim mbi(LBound(mi) To UBound(mi))
+    For i = LBound(mi) To UBound(mi)
+        Set mbi(i) = mi(i)
+    Next i
+    MethodInfoArrayToMethodBaseArray = mbi
+End Function
+
 ' PickupMethodByParamTypeImpl: 型「t」に含まれる名前「Name」のメソッドを検索します。
 '   BindingFlags: 絞り込み条件
+'                 BindingFlags_CreateInstance を含む場合は Name は無視されます
 '   Types: メソッドの引数に対応する型を表す mscorlib.Type のインスタンス。
 '          対応する引数の数だけ指定します。
 '   戻り値: mscorlib.MethodInfo のインスタンス、または見つからない場合 Nothing
-Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Name As String, ByVal BindingFlags As mscorlib.BindingFlags, ByRef Types() As Variant) As mscorlib.MethodInfo
+Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Name As String, ByVal BindingFlags As mscorlib.BindingFlags, ByRef Types() As Variant) As mscorlib.MethodBase
     Dim tlb As Long, tub As Long
     Dim actualTypeCount As Long
     Dim i As Long
@@ -234,16 +255,26 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
         End If
     Next i
 
-    Dim mis() As mscorlib.MethodInfo, mi As mscorlib.MethodInfo
-    Dim j As Long, k As Long, Matched As Boolean
-    ' BindingFlags で対応するメソッドの一覧を取得
-    mis = t.GetMethods(BindingFlags)
+    Dim mis() As mscorlib.MethodBase, mi As mscorlib.MethodBase
+    Dim j As Long, k As Long, NameMatched As Boolean, Matched As Boolean
+    If (BindingFlags And BindingFlags_CreateInstance) <> 0 Then
+        ' BindingFlags で対応するメソッドの一覧を取得
+        mis = ConstructorInfoArrayToMethodBaseArray(t.GetConstructors(BindingFlags))
+    Else
+        ' BindingFlags で対応するメソッドの一覧を取得
+        mis = MethodInfoArrayToMethodBaseArray(t.GetMethods(BindingFlags))
+    End If
     ' それぞれのメソッドに対し、メソッド名と引数の型をチェック
     For i = LBound(mis) To UBound(mis)
         Set mi = mis(i)
-        ' メソッド名を Option Compare ステートメント設定に応じた比較方法で判定
-        ' (大文字・小文字の区別を制御したい場合は StrComp 関数を用います。)
-        If mi.Name = Name Then
+        If (BindingFlags And BindingFlags_CreateInstance) <> 0 Then
+            NameMatched = mi.IsConstructor
+        Else
+            ' メソッド名を Option Compare ステートメント設定に応じた比較方法で判定
+            ' (大文字・小文字の区別を制御したい場合は StrComp 関数を用います。)
+            NameMatched = (mi.Name = Name)
+        End If
+        If NameMatched Then
             Dim p() As mscorlib.ParameterInfo
             ' 引数情報を取得(配列が返ります)
             p = mi.GetParameters()
@@ -277,7 +308,7 @@ Private Function PickupMethodByParamTypeImpl(ByVal t As mscorlib.Type, ByVal Nam
     Set PickupMethodByParamTypeImpl = mi
 End Function
 
-Private Function PickupMethodByParamType(ByVal t As mscorlib.Type, ByVal Name As String, ByVal BindingFlags As mscorlib.BindingFlags, ParamArray Types() As Variant) As mscorlib.MethodInfo
+Private Function PickupMethodByParamType(ByVal t As mscorlib.Type, ByVal Name As String, ByVal BindingFlags As mscorlib.BindingFlags, ParamArray Types() As Variant) As mscorlib.MethodBase
     Dim v() As Variant
     v = Types
     Set PickupMethodByParamType = PickupMethodByParamTypeImpl(t, Name, BindingFlags, v)
@@ -581,6 +612,41 @@ Public Function CLRCreateObjectWithParams(ByVal TypeName As String, ParamArray A
     Set CLRCreateObjectWithParams = ToObject(t.Assembly).CreateInstance_3(TypeName, False, _
         BindingFlags_Public Or BindingFlags_Instance Or BindingFlags_CreateInstance, _
         Nothing, v, Nothing, Array())
+End Function
+
+' Creates the instance of specified type with constructor parameters and specified types
+'   ArgTypesAndArgs must be the following values:
+'     index[0, 2, 4, ...]: Type instance(s)
+'     index[1, 3, 5, ...]: parameter value(s)
+Public Function CLRCreateObjectWithTypesAndParams(ByVal TypeName As String, ParamArray ArgTypesAndArgs() As Variant) As mscorlib.Object
+    Dim t As mscorlib.Type
+    Set t = CLRResolveType(TypeName)
+    If t Is Nothing Then Call Err.Raise(419)
+
+    Dim ArgTypes() As Variant, Args() As Variant
+    Dim c As Long, lb As Long, ub As Long, i As Long
+    lb = LBound(ArgTypesAndArgs)
+    ub = UBound(ArgTypesAndArgs)
+    c = ub - lb + 1
+    If c Mod 2 <> 0 Then
+        Call Err.Raise(5)
+    End If
+    c = c / 2
+    ReDim ArgTypes(0 To c - 1), Args(0 To c - 1)
+    Dim j As Long
+    j = lb
+    For i = 0 To c - 1
+        If Not IsType(ArgTypesAndArgs(j)) Then Call Err.Raise(5)
+        Set ArgTypes(i) = ArgTypesAndArgs(j)
+        Call VariantCopy(Args(i), ArgTypesAndArgs(j + 1))
+        j = j + 2
+    Next i
+
+    Dim cmi As mscorlib.ConstructorInfo
+    Set cmi = PickupMethodByParamTypeImpl(t, vbNullString, BindingFlags_Public Or BindingFlags_Instance Or BindingFlags_CreateInstance, ArgTypes)
+    If cmi Is Nothing Then Call Err.Raise(438)
+
+    Set CLRCreateObjectWithTypesAndParams = ToObject(cmi).Invoke_5(Args)
 End Function
 
 ' Returns the property value of specified name in the object with additional parameters
